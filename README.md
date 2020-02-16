@@ -25,7 +25,7 @@ In order to build and deploy the source files will need:
 
 ## Setup
 ### (Optional) Create Azure AD application registration
-This is if you want to connect to Azure subscriptions. It will save if you do this first as you will need the azure credentials as part of the setup of Cloud Security Console.
+This is if you want to connect to Azure subscriptions. It will save time if you do this first as you will need the azure credentials as part of the setup of Cloud Security Console.
 1. In Azure console create a new app registration
 2. In Azure console Obtain a secret key
 
