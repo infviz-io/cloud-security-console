@@ -1,0 +1,476 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+    AzureTenant:
+      Type: String
+      Description: (Optional) Provide azure tenant id
+    AzureClientId:
+      Type: String
+      Description: (Optional) Provide azure client id
+    AzureSecret:
+      Type: String
+      Description: (Optional) Provide azure secret
+
+Globals:
+  Function:
+    Runtime: python3.6
+    Environment:
+      Variables:
+        DBEnv: !Ref CscEnvTable
+
+Resources:
+# Cloud Security Console Setup
+  # CSC API Gateway using x-api-key auth for system to system calls & development
+  CscApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Auth:
+        ApiKeyRequired: True
+      Cors:
+        AllowOrigin: "'*'"
+      StageName: prod
+      Name: CscApi
+
+  # CSC API Gateway using cognito auth for ui calls
+  CscCog:
+    Type: AWS::Serverless::Api
+    Properties:
+      Auth:
+        AddDefaultAuthorizerToCorsPreflight: False
+        Authorizers:
+          CscCognitoAuth:
+            UserPoolArn: !GetAtt CscAuth.Arn
+            AuthType: "COGNITO_USER_POOLS"
+        DefaultAuthorizer: CscCognitoAuth
+      Cors:
+        AllowHeaders: "'Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers, Authorization'" 
+        AllowOrigin: "'*'"
+      StageName: prod
+      Name: CscCog
+
+  # CSC Authentication
+  CscAuth:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: csc-user-pool
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      AutoVerifiedAttributes:
+        - email
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: True
+
+  CscAuthLocal:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CscAuth
+      SupportedIdentityProviders:
+        - COGNITO
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - openid
+      CallbackURLs:
+        - http://localhost:4200/
+      LogoutURLs:
+        - http://localhost:4200/
+      GenerateSecret: false
+
+  CscAuthDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties: 
+      Domain: !Sub 'csc${AWS::AccountId}'
+      UserPoolId: !Ref CscAuth
+
+  # Environments Database
+  CscEnvTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: Cloud
+          AttributeType: S
+        - AttributeName: EnvId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: Cloud
+          KeyType: HASH
+        - AttributeName: EnvId
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      SSESpecification:
+        SSEEnabled: True
+
+  # Environment Methods
+  CscEnvPost:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./functions/csc
+      Handler: api-csc-environment.request_post
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      - LambdaInvokePolicy:
+          FunctionName: !Ref AzureFetchAssess
+      - !Ref EventBusPerms
+      Environment:
+        Variables:
+          AwsBridge: !Ref AwsEventBus
+          FetchLambda: !Ref AzureFetchAssess
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /env
+            Method: post
+            RestApiId: !Ref CscApi
+        CogEvent:
+          Type: Api
+          Properties:
+            Path: /env
+            Method: post
+            RestApiId: !Ref CscCog
+
+  CscEnvGet:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./functions/csc
+      Handler: api-csc-environment.request_get
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /env
+            Method: get
+            RestApiId: !Ref CscApi
+        CogEvent:
+          Type: Api
+          Properties:
+            Path: /env
+            Method: get
+            RestApiId: !Ref CscCog
+
+  CscEnvDelete:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./functions/csc
+      Handler: api-csc-environment.request_delete
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AzureAssessTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AwsFindingTable
+      - !Ref EventBusPerms
+      Environment:
+        Variables:
+          AwsBridge: !Ref AwsEventBus
+          DBAWSFindings: !Ref AwsFindingTable
+          DBAzureAssess: !Ref AzureAssessTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /env/{envid}
+            Method: delete
+            RestApiId: !Ref CscApi
+        CogEvent:
+          Type: Api
+          Properties:
+            Path: /env/{envid}
+            Method: delete
+            RestApiId: !Ref CscCog
+
+  # CSC Azure Methods
+  CssAzureGet:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./functions/csc
+      Handler: api-csc-azure.request_get
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AzureAssessTable
+      Environment:
+        Variables:
+          DBAzureAssess: !Ref AzureAssessTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /azure
+            Method: get
+            RestApiId: !Ref CscApi
+        CogEvent:
+          Type: Api
+          Properties:
+            Path: /azure
+            Method: get
+            RestApiId: !Ref CscCog
+
+  # CSC AWS Methods
+  CssAwsGet:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./functions/csc
+      Handler: api-csc-aws.request_get
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AwsFindingTable
+      Environment:
+        Variables:
+          DBAwsFindings: !Ref AwsFindingTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /aws
+            Method: get
+            RestApiId: !Ref CscApi
+        CogEvent:
+          Type: Api
+          Properties:
+            Path: /aws
+            Method: get
+            RestApiId: !Ref CscCog
+
+# AWS Setup
+  # Database
+  AwsFindingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: AwsAccountId
+          AttributeType: S
+        - AttributeName: Id
+          AttributeType: S
+        - AttributeName: RecordState
+          AttributeType: S
+        - AttributeName: LastObservedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: AwsAccountId
+          KeyType: HASH
+        - AttributeName: Id
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 3
+        WriteCapacityUnits: 3
+      SSESpecification:
+        SSEEnabled: True
+      GlobalSecondaryIndexes:
+        - IndexName: DisplayData
+          KeySchema:
+            - AttributeName: RecordState
+              KeyType: HASH
+            - AttributeName: LastObservedAt
+              KeyType: RANGE
+          Projection:
+            NonKeyAttributes:
+              - Title
+              - Description
+              - Id
+              - FirstObservedAt
+              - AwsAccountId
+              - ProductArn
+            ProjectionType: INCLUDE
+          ProvisionedThroughput:
+            ReadCapacityUnits: 3
+            WriteCapacityUnits: 1
+
+  # EventBridge
+  AwsEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: SecHubLite-EventBridge
+
+  EventBusPerms:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - events:PutPermission
+              - events:RemovePermission
+            Resource: !GetAtt AwsEventBus.Arn
+
+  # Store findings from EventBridge
+  AwsStoreFinding:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.6
+      CodeUri: ./functions/aws
+      Handler: store-aws-findings.request_handler
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AwsFindingTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      Environment:
+        Variables:
+          DBAWSFindings: !Ref AwsFindingTable
+      Events:
+        SecHubLocalDetect:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern: {"source":["aws.securityhub"],"detail-type":["Security Hub Findings - Imported"]}
+        SecHubSpokeDetect:
+          Type: CloudWatchEvent
+          Properties:
+            EventBusName: !Ref AwsEventBus
+            Pattern: {"source":["aws.securityhub"],"detail-type":["Security Hub Findings - Imported"]}
+        SecHubSpokeDetectCustom:
+          Type: CloudWatchEvent
+          Properties:
+            EventBusName: !Ref AwsEventBus
+            Pattern: {"source":["custom.securityconsole"],"detail-type":["Security Hub Findings - Imported"]}
+
+  # Store findings directly from Security Hub
+  AwsFetchFinding:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.6
+      CodeUri: ./functions/aws
+      Handler: fetch-aws-findings.request_handler
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AwsFindingTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      - !Ref SecHubPerms
+      Environment:
+        Variables:
+          DBAWSFindings: !Ref AwsFindingTable
+
+  SecHubPerms:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - SecurityHub:GetFindings
+            Resource: "*"
+
+# Azure Setup
+  # Database
+  AzureAssessTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: SubscriptionId
+          AttributeType: S
+        - AttributeName: Id
+          AttributeType: S
+        - AttributeName: RecordState
+          AttributeType: S
+        - AttributeName: LastObservedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: SubscriptionId
+          KeyType: HASH
+        - AttributeName: Id
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 3
+        WriteCapacityUnits: 3
+      SSESpecification:
+        SSEEnabled: True
+      GlobalSecondaryIndexes:
+        - IndexName: DisplayData
+          KeySchema:
+            - AttributeName: RecordState
+              KeyType: HASH
+            - AttributeName: LastObservedAt
+              KeyType: RANGE
+          Projection:
+            NonKeyAttributes:
+              - Id
+              - FirstObservedAt
+              - SubscriptionId
+              - type
+              - Title
+              - Description
+            ProjectionType: INCLUDE
+          ProvisionedThroughput:
+            ReadCapacityUnits: 3
+            WriteCapacityUnits: 1
+
+  # Store assessments directly from Azure Management API
+  AzureFetchAssess:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.6
+      CodeUri: ./functions/azure
+      Handler: fetch-azure-assessments.request_handler
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref AzureAssessTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      Environment:
+        Variables:
+          DBAzureAssess: !Ref AzureAssessTable
+          Tenant: !Ref AzureTenant
+          ClientId: !Ref AzureClientId
+          Secret: !Ref AzureSecret
+
+  # Start a job to through all the azure subscriptions
+  AzureStartJob:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.6
+      CodeUri: ./functions/azure
+      Handler: start-azure-job.request_handler
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      - LambdaInvokePolicy:
+          FunctionName: !Ref AzureFetchAssess
+      Environment:
+        Variables:
+          FetchLambda: !Ref AzureFetchAssess
+      Events:
+        AzureSchJob:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+
+Outputs:
+  Api:
+    Value: !Sub
+      - 'https://${Subdomain}.execute-api.${AWS::Region}.amazonaws.com/prod'
+      - Subdomain: !Ref CscCog
+  CognitoRegion:
+    Value: !Ref "AWS::Region"
+  CognitoDomain:
+    Value: !Sub
+      - '${Subdomain}.auth.${AWS::Region}.amazoncognito.com'
+      - Subdomain: !Ref CscAuthDomain
+  CognitoClientId:
+    Value: !Ref CscAuthLocal
+  CognitoPool:
+    Value: !Ref CscAuth
+  CognitoRedirect:
+    Value: 'http://localhost:4200'
+  
+
+
+
+        

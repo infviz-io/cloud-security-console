@@ -1,0 +1,5 @@
+package.yaml
+deploy.ps1
+*.pyc
+environment.ts
+environment.prod.ts

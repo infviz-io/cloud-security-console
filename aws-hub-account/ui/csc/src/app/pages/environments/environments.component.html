@@ -1,0 +1,97 @@
+<div class="row">
+    <div class="col-md-12">
+        <div class="card ">
+            <div class="card-header">
+                <h4 class="card-title">Environments</h4>
+                <p class="card-category" *ngIf="envFound < 0">Loading...</p>
+                <p class="card-category" *ngIf="envFound == 0">None found</p>
+                <p class="card-category" *ngIf="envFound > 0">Found {{envFound}} items</p>
+            </div>
+            <div class="card-body table-full-width table-responsive">
+                <table *ngIf="envFound > 0" class="table table-striped">
+                    <thead>
+                        <tr>
+                            <td>Cloud</td>
+                            <td>EnvironmentId</td>
+                            <td>Message</td>
+                            <td>Status</td>
+                            <td>TimeStamp</td>
+                            <td>Remove</td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let row of envRecords;index as i;">
+                            <td>{{row.Cloud}}</td>
+                            <td>{{row.EnvId}}</td>
+                            <td>{{row.Message}}</td>
+                            <td>{{row.Status}}</td>
+                            <td>{{row.Timestamp}}</td>
+                            <td><a href="javascript:void(0);" style="color:red" *ngIf="row.Status!='MASTER'" (click)="removeCloud(row)">REMOVE</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Add AWS Environment</h4>
+                Steps:
+                <ol>
+                    <li>Add the AWS Account ID in the form below and submit.</li>
+                    <li>Run the command below to setup a deployment bucket</li>
+                    <code>aws s3 mb s3://(bucketname) --region (region) --profile (aws profile)</code>
+                    <li>In the aws-node-account folder run the command below to package sam deployment</li>
+                    <code>sam package --template-file template.yaml --output-template-file package.yaml --s3-bucket (bucketname) --region (region) --profile (aws profile)</code>
+                    <li>In the aws-node-account folder run the command below to deploy the configuation</li>
+                    <code>sam deploy --template-file package.yaml --stack-name (stackname) --region (region) --parameter-overrides SecConsoleHubEventBridge=arn:aws:events:(region):{{masterId}}:event-bus/SecHubLite-EventBridge --capabilities CAPABILITY_IAM --profile (aws profile)</code>
+                    <li>Run lambda 'FetchAwsFindings' with empty json {{'{}'}} to push inital data</li>
+                </ol>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="form-group">
+                            <label>AWS Account ID</label>
+                            <input type="text" class="form-control" placeholder="12 Digit ID" [(ngModel)]="awsId">
+                        </div>
+                    </div>
+                    
+                </div>
+                <button type="submit" class="btn btn-info btn-fill pull-right" (click)="addAws()">Add AWS</button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Add Azure Environment</h4>
+                First time steps:
+                <ol>
+                    <li>In Azure console create a new app registration</li>
+                    <li>In Azure console Obtain a secret key</li>
+                    <li>In the aws-hub-account folder run the command below to update your azure credentials</li>
+                    <code>sam deploy --template-file package.yaml --stack-name (existing stackname) --region (region) --capabilities CAPABILITY_IAM --parameter-overrides AzureTenant=(tenant) AzureClientId=(clientid) AzureSecret=(secret)</code>
+                </ol>
+                For each subscription steps:
+                <ol>
+                    <li>In Azure console grant the app security reader role in your subscription</li>
+                    <li>Add the Subscription ID in the form below and submit. This will pull inital data.</li>
+                </ol>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="form-group">
+                            <label>Azure Subscription ID</label>
+                            <input type="text" class="form-control" placeholder="36 Character GUID" [(ngModel)]="azureId">
+                        </div>
+                    </div>
+                    
+                </div>
+                <button type="submit" class="btn btn-info btn-fill pull-right" (click)="addAzure()">Add Azure</button>
+            </div>          
+        </div>
+    </div>
+</div>

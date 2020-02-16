@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  SecConsoleHubEventBridge:
+    Type: String
+    Description: Provide the ARN of the your Cloud Security Console Hub Event Bridge.
+    AllowedPattern : ".+"
+
+Resources:
+  SecNodeEvents:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern: {"source":["aws.securityhub"],"detail-type":["Security Hub Findings - Imported"]}
+      Targets:
+        - Arn: !Ref SecConsoleHubEventBridge
+          Id: Security-Hub-findings
+          RoleArn: !GetAtt EventBridgeRemoteRole.Arn
+
+  SecCustomNodeEvents:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern: {"source":["custom.securityconsole"],"detail-type":["Security Hub Findings - Imported"]}
+      Targets:
+        - Arn: !Ref SecConsoleHubEventBridge
+          Id: Security-Hub-findings
+          RoleArn: !GetAtt EventBridgeRemoteRole.Arn
+      
+  EventBridgeRemoteRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"events.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+      Policies: 
+        - PolicyDocument: 
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !Ref SecConsoleHubEventBridge
+          PolicyName: Events
+
+  FetchAwsFindings:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.6
+      CodeUri: ./functions
+      Handler: fetch-aws-findings.request_handler
+      Timeout: 30
+      Policies:
+      - !Ref EventsPerms
+
+  EventsPerms:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - events:PutEvents
+              - SecurityHub:GetFindings
+            Resource: "*"
+
+
+    

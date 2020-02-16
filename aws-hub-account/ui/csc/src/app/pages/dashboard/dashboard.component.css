@@ -1,0 +1,8 @@
+td.long{
+    word-wrap: break-word; 
+    word-break: break-all;
+}
+
+td.medium{
+    word-wrap: break-word;
+}
