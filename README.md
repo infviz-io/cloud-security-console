@@ -6,9 +6,9 @@ The Cloud Security Console (CSC) aggregates AWS security hub & Azure security ce
 * You can workaround the AWS Security Hub single master limitation within AWS security hub console.
 * You can easily grant access to security findings without having access to the AWS console or Azure console.
 * You can customise it with anything else you want.
-* All security information is keep you accounts you control.
+* All security information is kept in accounts you control.
 
-This was built for mainly demostration purposes and therefore has some limitations we compared to the native AWS security hub & Azure security cetner. These include:
+This was built for mainly demostration purposes and therefore has some limitations when compared to the native AWS security hub & Azure security cetner. These include:
 * It only shows AWS Security Hub findings
 * It collects Azure assessments and alert events
 * It is a read only console
