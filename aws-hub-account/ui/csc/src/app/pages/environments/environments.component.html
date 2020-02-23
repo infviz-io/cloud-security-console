@@ -26,7 +26,7 @@
                             <td>{{row.Message}}</td>
                             <td>{{row.Status}}</td>
                             <td>{{row.Timestamp}}</td>
-                            <td><a href="javascript:void(0);" style="color:red" *ngIf="row.Status!='MASTER'" (click)="removeCloud(row)">REMOVE</a></td>
+                            <td><a href="javascript:void(0);" style="color:red" *ngIf="row.Status!='MASTER' && row.Cloud!='GCP'" (click)="removeCloud(row)">REMOVE</a></td>
                         </tr>
                     </tbody>
                 </table>

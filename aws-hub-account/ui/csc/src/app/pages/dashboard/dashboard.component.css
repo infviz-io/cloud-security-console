@@ -6,3 +6,9 @@ td.long{
 td.medium{
     word-wrap: break-word;
 }
+
+button.hideLayout{
+    color:black !important;
+    padding: 0px !important;
+    border: none !important;
+}

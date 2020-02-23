@@ -23,7 +23,13 @@ def envStatus(tableName,status,envId,message):
     table=client.Table(tableName)
     if len(envId)==12:
         cloud='AWS'
-    else:
+    elif len(envId)==36 and len(envId.split('-'))==5:
         cloud='Azure'
+    elif len(envId)==13:
+        cloud='GCP'
+        envId=envId[1:]
+    else:
+        cloud='Unknown'
     item={'Cloud':cloud,'EnvId':envId,'Status':status,'Message':message,'Timestamp':datetime.datetime.now().isoformat()}
     table.put_item(Item=item)
+    

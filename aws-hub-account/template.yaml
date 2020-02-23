@@ -2,15 +2,33 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
 Parameters:
-    AzureTenant:
-      Type: String
-      Description: (Optional) Provide azure tenant id
-    AzureClientId:
-      Type: String
-      Description: (Optional) Provide azure client id
-    AzureSecret:
-      Type: String
-      Description: (Optional) Provide azure secret
+  AzureTenant:
+    Type: String
+    Default: ""
+    Description: (Optional) Provide azure tenant id
+  AzureClientId:
+    Type: String
+    Default: ""
+    Description: (Optional) Provide azure client id
+  AzureSecret:
+    Type: String
+    Default: ""
+    Description: (Optional) Provide azure secret
+  GoogleOrgId:
+    Type: String
+    Default: ""
+    Description: (Optional) Provide gcp organization id
+  GoogleClientEmail:
+    Type: String
+    Default: ""
+    Description: (Optional) Provide gcp client email
+  GoogleSecret:
+    Type: String
+    Default: ""
+    Description: (Optional) Provide gcp private key in base64 format
+
+Conditions:
+  GoogleDeploy: !Not [!Equals [!Ref GoogleOrgId, ""]]
 
 Globals:
   Function:
@@ -27,8 +45,6 @@ Resources:
     Properties:
       Auth:
         ApiKeyRequired: True
-      Cors:
-        AllowOrigin: "'*'"
       StageName: prod
       Name: CscApi
 
@@ -244,6 +260,33 @@ Resources:
             Method: get
             RestApiId: !Ref CscCog
 
+  # CSC GCP Methods (Deploy only if the Google Parameters are filled in)
+  CscGcpGet:
+    Type: AWS::Serverless::Function
+    Condition: GoogleDeploy
+    Properties:
+      CodeUri: ./functions/csc
+      Handler: api-csc-gcp.request_get
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref GcpFindingTable
+      Environment:
+        Variables:
+          DBGcpFindings: !Ref GcpFindingTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /gcp
+            Method: get
+            RestApiId: !Ref CscApi
+        CogEvent:
+          Type: Api
+          Properties:
+            Path: /gcp
+            Method: get
+            RestApiId: !Ref CscCog
+
 # AWS Setup
   # Database
   AwsFindingTable:
@@ -430,7 +473,7 @@ Resources:
           ClientId: !Ref AzureClientId
           Secret: !Ref AzureSecret
 
-  # Start a job to through all the azure subscriptions
+  # Start a job to go through all the azure subscriptions
   AzureStartJob:
     Type: AWS::Serverless::Function
     Properties:
@@ -452,6 +495,78 @@ Resources:
           Properties:
             Schedule: rate(1 hour)
 
+# Google Setup
+  # Database
+  GcpFindingTable:
+    Type: AWS::DynamoDB::Table
+    Condition: GoogleDeploy
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: ProjectId
+          AttributeType: S
+        - AttributeName: Id
+          AttributeType: S
+        - AttributeName: RecordState
+          AttributeType: S
+        - AttributeName: LastObservedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ProjectId
+          KeyType: HASH
+        - AttributeName: Id
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 3
+        WriteCapacityUnits: 3
+      SSESpecification:
+        SSEEnabled: True
+      GlobalSecondaryIndexes:
+        - IndexName: DisplayData
+          KeySchema:
+            - AttributeName: RecordState
+              KeyType: HASH
+            - AttributeName: LastObservedAt
+              KeyType: RANGE
+          Projection:
+            NonKeyAttributes:
+              - Id
+              - FirstObservedAt
+              - ProjectId
+              - type
+              - Title
+              - Description
+              - resourceName
+            ProjectionType: INCLUDE
+          ProvisionedThroughput:
+            ReadCapacityUnits: 3
+            WriteCapacityUnits: 1
+
+  # Store findings directly from Google Platform API
+  GcpFetchFinding:
+    Type: AWS::Serverless::Function
+    Condition: GoogleDeploy
+    Properties:
+      Runtime: python3.6
+      CodeUri: ./functions/gcp
+      Handler: fetch-gcp-findings.request_handler
+      Timeout: 60
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref GcpFindingTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CscEnvTable
+      Environment:
+        Variables:
+          DBGcpFinding: !Ref GcpFindingTable
+          OrgId: !Ref GoogleOrgId
+          ClientEmail: !Ref GoogleClientEmail
+          Secret: !Ref GoogleSecret
+      Events:
+        GcpSchJob:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+
 Outputs:
   Api:
     Value: !Sub
@@ -469,8 +584,3 @@ Outputs:
     Value: !Ref CscAuth
   CognitoRedirect:
     Value: 'http://localhost:4200'
-  
-
-
-
-        

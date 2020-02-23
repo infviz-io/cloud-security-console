@@ -1,14 +1,53 @@
 <div class="row">
+    <div class="col-md-12" *ngIf="gcpOn">
+        <div class="card">
+            <div class="card-header">
+                <button class="btn btn-link hideLayout" data-toggle="collapse" data-target="#collapseGcp">
+                    <h4 class="card-title">GCP Security Findings</h4>
+                </button>
+                <p class="card-category" *ngIf="gcpFound < 0">Loading...</p>
+                <p class="card-category" *ngIf="gcpFound == 0">None found</p>
+                <p class="card-category" *ngIf="gcpFound > 0">Found {{gcpFound}} items</p>
+            </div>
+            <div class="card-body table-full-width table-responsive">
+                <div id="collapseGcp" class="collapse" >
+                <table *ngIf="gcpFound > 0" class="table table-striped">
+                    <thead>
+                        <tr>
+                            <td>Time</td>
+                            <td>Project</td>
+                            <td>Title</td>
+                            <td>Description</td>
+                            <td>State</td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let row of gcpRecords;index as i;">
+                            <td>{{row.Time | date:'H:mm dd-MM'}}</td>
+                            <td class="long">{{row.ProjectId}}</td>
+                            <td>{{row.Title}}</td>
+                            <td class="long" title="{{row.Description}}">{{row.ShortDesc}}</td>
+                            <td>{{row.RecordState}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="col-md-12">
         <div class="card">
             <div class="card-header">
-                <h4 class="card-title">Azure Security Assessments</h4>
+                <button class="btn btn-link hideLayout" data-toggle="collapse" data-target="#collapseAzure">
+                    <h4 class="card-title">Azure Security Assessments</h4>
+                </button>
                 <p class="card-category" *ngIf="azureFound < 0">Loading...</p>
                 <p class="card-category" *ngIf="azureFound == 0">None found</p>
                 <p class="card-category" *ngIf="azureFound > 0">Found {{azureFound}} items</p>
             </div>
             <div class="card-body table-full-width table-responsive">
-
+                <div id="collapseAzure" class="collapse" >
                 <table *ngIf="azureFound > 0" class="table table-striped">
                     <thead>
                         <tr>
@@ -29,18 +68,22 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-12">
         <div class="card ">
             <div class="card-header ">
-                <h4 class="card-title">AWS Security Findings</h4>
+                <button class="btn btn-link hideLayout" data-toggle="collapse" data-target="#collapseAws">
+                    <h4 class="card-title">AWS Security Findings</h4>
+                </button>
                 <p class="card-category" *ngIf="awsFound < 0">Loading...</p>
                 <p class="card-category" *ngIf="awsFound == 0">None found</p>
                 <p class="card-category" *ngIf="awsFound > 0">Found {{awsFound}} items</p>
             </div>
             <div class="card-body table-full-width table-responsive">
+                <div id="collapseAws" class="collapse" >
                 <table *ngIf="awsFound > 0" class="table table-striped">
                     <thead>
                         <tr>
@@ -61,6 +104,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>

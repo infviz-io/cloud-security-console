@@ -7,10 +7,13 @@ import { CscService } from '../../services/csc.service'
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
+  gcpOn=false
+  gcpFound=-1
   awsFound=-1
   azureFound=-1
   awsRecords=[]
   azureRecords=[]
+  gcpRecords=[]
 
   constructor(
     private cscService: CscService
@@ -29,7 +32,7 @@ export class DashboardComponent implements OnInit {
           tempItem['ShortDesc']=this.textShort(element['Description'])
           tempList.push(tempItem)
         });
-        this.awsRecords=tempList
+        this.awsRecords=tempList.reverse()
       }
     )
     this.cscService.getAzure().subscribe(
@@ -45,7 +48,28 @@ export class DashboardComponent implements OnInit {
           tempItem['ShortDesc']=this.textShort(element['Description'])
           tempList.push(tempItem)
         });
-        this.azureRecords=tempList
+        this.azureRecords=tempList.reverse()
+      }
+    )
+    this.cscService.getGcp().subscribe(
+      data=>{
+        this.gcpOn=true
+        console.log(data)
+        this.gcpFound=data['Items'].length
+        var tempList=[]
+        data['Items'].forEach(element => {
+          var tempItem={}
+          tempItem=element
+          tempItem['Time']=this.convertDate(element['LastObservedAt'])
+          tempItem['ShortDesc']=this.textShort(element['Description'])
+          tempList.push(tempItem)
+        });
+        this.gcpRecords=tempList.reverse()
+      },
+      err=>{
+        this.gcpOn=false
+        console.log(err)
+        console.log("This is normal if GCP is not in use")
       }
     )
   }
